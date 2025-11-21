@@ -1,0 +1,22 @@
+steps:
+- name: 'gcr.io/cloud-builders/docker'
+args: ['build','-t','IMAGE_FRONTEND_REPO:$SHORT_SHA','frontend/']
+- name: 'gcr.io/cloud-builders/docker'
+args: ['push','IMAGE_FRONTEND_REPO:$SHORT_SHA']
+- name: 'gcr.io/cloud-builders/docker'
+args: ['build','-t','IMAGE_BACKEND_REPO:$SHORT_SHA','backend/']
+- name: 'gcr.io/cloud-builders/docker'
+args: ['push','IMAGE_BACKEND_REPO:$SHORT_SHA']
+- name: 'gcr.io/cloud-builders/kubectl'
+entrypoint: 'bash'
+args:
+- '-c'
+- |
+kubectl -n production set image deployment/frontend frontend=IMAGE_FRONTEND_REPO:$SHORT_SHA || exit 1
+kubectl -n production set image deployment/backend backend=IMAGE_BACKEND_REPO:$SHORT_SHA || exit 1
+images:
+- 'IMAGE_FRONTEND_REPO:$SHORT_SHA'
+- 'IMAGE_BACKEND_REPO:$SHORT_SHA'
+
+
+# Optionally add substitutions to replace IMAGE_* placeholders at build time
