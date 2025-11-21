@@ -1,0 +1,37 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+name: frontend
+namespace: production
+labels:
+app: frontend
+spec:
+replicas: 2
+selector:
+matchLabels:
+app: frontend
+template:
+metadata:
+labels:
+app: frontend
+spec:
+containers:
+- name: frontend
+image: IMAGE_FRONTEND_PLACEHOLDER
+ports:
+- containerPort: 80
+readinessProbe:
+httpGet:
+path: /
+port: 80
+initialDelaySeconds: 5
+periodSeconds: 5
+livenessProbe:
+httpGet:
+path: /
+port: 80
+initialDelaySeconds: 15
+periodSeconds: 10
+resources:
+requests:
+memory: "512Mi"
