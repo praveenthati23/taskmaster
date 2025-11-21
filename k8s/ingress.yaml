@@ -1,0 +1,19 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+name: taskmaster-ingress
+namespace: production
+annotations:
+kubernetes.io/ingress.class: "gce"
+networking.gke.io/managed-certificates: "taskmaster-cert"
+spec:
+rules:
+- http:
+paths:
+- path: /
+pathType: Prefix
+backend:
+service:
+name: frontend
+port:
+number: 80
