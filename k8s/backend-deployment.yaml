@@ -17,7 +17,7 @@ app: backend
 spec:
 containers:
 - name: backend
-image: IMAGE_BACKEND_PLACEHOLDER
+image: gcr.io/still-primer-424112-t3/taskmaster-backend:<tag>
 ports:
 - containerPort: 8080
 env:
