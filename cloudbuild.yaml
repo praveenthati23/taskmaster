@@ -1,22 +1,75 @@
+options:
+  substitutionOption: ALLOW_LOOSE
+
 steps:
+
+# ============================
+# FRONTEND: Build & Push
+# ============================
 - name: 'gcr.io/cloud-builders/docker'
-args: ['build','-t','IMAGE_FRONTEND_REPO:$SHORT_SHA','frontend/']
+  args:
+    [
+      'build',
+      '-t',
+      'us-central1-docker.pkg.dev/still-primer-424112-t3/taskmaster-frontend/frontend:latest',
+      'frontend/'
+    ]
+
 - name: 'gcr.io/cloud-builders/docker'
-args: ['push','IMAGE_FRONTEND_REPO:$SHORT_SHA']
+  args:
+    [
+      'push',
+      'us-central1-docker.pkg.dev/still-primer-424112-t3/taskmaster-frontend/frontend:latest'
+    ]
+
+
+# ============================
+# BACKEND: Build & Push
+# ============================
 - name: 'gcr.io/cloud-builders/docker'
-args: ['build','-t','IMAGE_BACKEND_REPO:$SHORT_SHA','backend/']
+  args:
+    [
+      'build',
+      '-t',
+      'us-central1-docker.pkg.dev/still-primer-424112-t3/taskmaster-backend/backend:latest',
+      'backend/'
+    ]
+
 - name: 'gcr.io/cloud-builders/docker'
-args: ['push','IMAGE_BACKEND_REPO:$SHORT_SHA']
-- name: 'gcr.io/cloud-builders/kubectl'
-entrypoint: 'bash'
-args:
-- '-c'
-- |
-kubectl -n production set image deployment/frontend frontend=IMAGE_FRONTEND_REPO:$SHORT_SHA || exit 1
-kubectl -n production set image deployment/backend backend=IMAGE_BACKEND_REPO:$SHORT_SHA || exit 1
+  args:
+    [
+      'push',
+      'us-central1-docker.pkg.dev/still-primer-424112-t3/taskmaster-backend/backend:latest'
+    ]
+
+
+# ============================
+# DEPLOY TO GKE (Autopilot)
+# ============================
+- name: 'gcr.io/google.com/cloudsdktool/cloud-sdk:slim'
+  entrypoint: 'bash'
+  args:
+    - '-c'
+    - |
+      set -e
+
+      echo ">>> Authenticating with GKE cluster"
+      gcloud container clusters get-credentials taskmaster-cluster \
+        --region=us-central1 \
+        --project=still-primer-424112-t3
+
+      echo ">>> Applying Kubernetes deployments"
+
+      kubectl -n production set image deployment/frontend frontend=us-central1-docker.pkg.dev/still-primer-424112-t3/taskmaster-frontend/frontend:latest
+
+      kubectl -n production set image deployment/backend backend=us-central1-docker.pkg.dev/still-primer-424112-t3/taskmaster-backend/backend:latest
+
+      echo ">>> Rolling updates triggered successfully"
+
+
+# ============================
+# IMAGES BUILT BY THIS PIPELINE
+# ============================
 images:
-- 'IMAGE_FRONTEND_REPO:$SHORT_SHA'
-- 'IMAGE_BACKEND_REPO:$SHORT_SHA'
-
-
-# Optionally add substitutions to replace IMAGE_* placeholders at build time
+  - 'us-central1-docker.pkg.dev/still-primer-424112-t3/taskmaster-frontend/frontend:latest'
+  - 'us-central1-docker.pkg.dev/still-primer-424112-t3/taskmaster-backend/backend:latest'
