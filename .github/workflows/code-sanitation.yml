@@ -67,7 +67,7 @@ jobs:
 
   # 4. Release gate: block if any Critical or High
   gate:
-    needs: upload
+    needs: [semgrep, trivy]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/download-artifact@v4
