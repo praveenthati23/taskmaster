@@ -1,0 +1,41 @@
+name: code-sanitation
+on:
+  push:
+    branches: ["dev/**"]
+  workflow_dispatch: {}
+
+jobs:
+  semgrep:
+    runs-on: ubuntu-latest
+    container: semgrep/semgrep
+    steps:
+      - uses: actions/checkout@v4
+      - name: Semgrep scan
+        run: semgrep scan --config p/owasp-top-ten --json --output semgrep.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: semgrep-report
+          path: semgrep.json
+
+  upload-semgrep:
+    needs: semgrep
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: semgrep-report
+      - name: Upload to DefectDojo
+        env:
+          DD_URL: ${{ secrets.DD_URL }}
+          DD_TOKEN: ${{ secrets.DD_TOKEN }}
+        run: |
+          curl -sS --fail-with-body -X POST "$DD_URL/api/v2/reimport-scan/" \
+            -H "Authorization: Token $DD_TOKEN" \
+            -F "scan_type=Semgrep JSON Report" \
+            -F "file=@semgrep.json" \
+            -F "product_type_name=WealthUpp" \
+            -F "product_name=${{ github.event.repository.name }}" \
+            -F "engagement_name=${{ github.ref_name }}" \
+            -F "test_title=Semgrep" \
+            -F "auto_create_context=true" \
+            -F "close_old_findings=true"
