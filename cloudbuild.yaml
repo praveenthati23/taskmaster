@@ -4,7 +4,7 @@ options:
 steps:
 
 # ============================
-# FRONTEND: Build & Push
+# FRONTEND: Build and Push
 # ============================
 - name: 'gcr.io/cloud-builders/docker'
   args:
