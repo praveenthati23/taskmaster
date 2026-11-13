@@ -5,6 +5,7 @@ on:
   workflow_dispatch: {}
 
 jobs:
+  # 1. Code scan (OWASP Top 10)
   semgrep:
     runs-on: ubuntu-latest
     container: semgrep/semgrep
@@ -17,25 +18,72 @@ jobs:
           name: semgrep-report
           path: semgrep.json
 
-  upload-semgrep:
-    needs: semgrep
+  # 2. Library + secrets scan
+  trivy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Trivy scan
+        uses: aquasecurity/trivy-action@0.36.0
+        with:
+          scan-type: fs
+          scan-ref: .
+          scanners: vuln,secret
+          format: json
+          output: trivy.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: trivy-report
+          path: trivy.json
+
+  # 3. Send both reports to DefectDojo
+  upload:
+    needs: [semgrep, trivy]
+    runs-on: ubuntu-latest
+    env:
+      DD_URL: ${{ secrets.DD_URL }}
+      DD_TOKEN: ${{ secrets.DD_TOKEN }}
+      PRODUCT: ${{ github.event.repository.name }}
+      BRANCH: ${{ github.ref_name }}
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: semgrep-report
+      - uses: actions/download-artifact@v4
+        with:
+          name: trivy-report
+      - name: Upload to DefectDojo
+        run: |
+          upload () {
+            curl -sS --fail-with-body -X POST "$DD_URL/api/v2/reimport-scan/" \
+              -H "Authorization: Token $DD_TOKEN" \
+              -F "scan_type=$1" -F "file=@$2" -F "test_title=$3" \
+              -F "product_type_name=WealthUpp" -F "product_name=$PRODUCT" \
+              -F "engagement_name=$BRANCH" \
+              -F "auto_create_context=true" -F "close_old_findings=true"
+          }
+          upload "Semgrep JSON Report" semgrep.json Semgrep
+          upload "Trivy Scan" trivy.json Trivy
+
+  # 4. Release gate: block if any Critical or High
+  gate:
+    needs: upload
     runs-on: ubuntu-latest
     steps:
       - uses: actions/download-artifact@v4
         with:
           name: semgrep-report
-      - name: Upload to DefectDojo
-        env:
-          DD_URL: ${{ secrets.DD_URL }}
-          DD_TOKEN: ${{ secrets.DD_TOKEN }}
+      - uses: actions/download-artifact@v4
+        with:
+          name: trivy-report
+      - name: Check for Critical / High
         run: |
-          curl -sS --fail-with-body -X POST "$DD_URL/api/v2/reimport-scan/" \
-            -H "Authorization: Token $DD_TOKEN" \
-            -F "scan_type=Semgrep JSON Report" \
-            -F "file=@semgrep.json" \
-            -F "product_type_name=WealthUpp" \
-            -F "product_name=${{ github.event.repository.name }}" \
-            -F "engagement_name=${{ github.ref_name }}" \
-            -F "test_title=Semgrep" \
-            -F "auto_create_context=true" \
-            -F "close_old_findings=true"
+          S=$(jq '[.results[] | select(.extra.severity=="ERROR" or .extra.severity=="CRITICAL" or .extra.severity=="HIGH")] | length' semgrep.json)
+          T=$(jq '[.Results[]? | (.Vulnerabilities[]?, .Secrets[]?) | select(.Severity=="CRITICAL" or .Severity=="HIGH")] | length' trivy.json)
+          echo "Semgrep Critical/High: $S"
+          echo "Trivy Critical/High:   $T"
+          if [ "$S" -gt 0 ] || [ "$T" -gt 0 ]; then
+            echo "RELEASE BLOCKED - fix the issues in DefectDojo, then push again."
+            exit 1
+          fi
+          echo "RELEASE PASSED"
